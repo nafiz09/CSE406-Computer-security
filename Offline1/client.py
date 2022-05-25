@@ -1,7 +1,14 @@
 import socket
-s = socket.socket()
-s.connect(('localhost',8888))
+from BitVector import *
 
-while True:
-    msg = s.recv(1024)
-    print(msg.decode("utf-8"))
+
+
+s = socket.socket()
+s.connect(('localhost',1112))
+
+# while True:
+a = BitVector(size=0)
+msg = s.recv(1024)
+a += BitVector(hexstring=msg.decode("utf-8"))
+print(msg)
+print(a.get_bitvector_in_ascii())
