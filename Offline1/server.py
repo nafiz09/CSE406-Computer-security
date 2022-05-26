@@ -1,5 +1,6 @@
 import socket
 from BitVector import *
+import time
 
 Sbox = (
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -20,32 +21,40 @@ Sbox = (
     0x8C, 0xA1, 0x89, 0x0D, 0xBF, 0xE6, 0x42, 0x68, 0x41, 0x99, 0x2D, 0x0F, 0xB0, 0x54, 0xBB, 0x16
 )
 
+Mixer = [
+    [BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01"), BitVector(hexstring="01")],
+    [BitVector(hexstring="01"), BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01")],
+    [BitVector(hexstring="01"), BitVector(hexstring="01"), BitVector(hexstring="02"), BitVector(hexstring="03")],
+    [BitVector(hexstring="03"), BitVector(hexstring="01"), BitVector(hexstring="01"), BitVector(hexstring="02")]
+]
+
 s = socket.socket()
 
-s.bind(('localhost', 1112))
+s.bind(('localhost', 1234))
 s.listen(1)
 
 c, add = s.accept()
 print("connection stablished:", add)
 
 round_keys = []
+AES_modulus = BitVector(bitstring="100011011")
 
-def substitute_bytes_using_sbox(bitvector):
+key_scheduling_time = 0
+
+encryption_time = 0
+
+def sub_sbox(bitvector):
     sub_bitvector = BitVector(size=0)
 
     for i in range(0, bitvector.length(), 8):
-            sub_bitvector += BitVector(intVal=Sbox[bitvector[i: i+8].intValue()], size=8)
+            index = bitvector[i: i+8].intValue()
+            sub_bitvector += BitVector(intVal=Sbox[index], size=8)
     return sub_bitvector
 
 
-def g(w3):
+def g(w3,round_constant):
     w3 = w3 << 8
-    rc = BitVector(hexstring="01")
-    #multiplier = BitVector(hexstring="02")
-    round_constant = BitVector(hexstring=rc.get_bitvector_in_hex())
-    round_constant += BitVector(hexstring="000000")
-
-    w3 = substitute_bytes_using_sbox(w3)
+    w3 = sub_sbox(w3)
     w3 = w3^round_constant
 
     return w3
@@ -58,26 +67,6 @@ while True:
     if len(round_key0) == 16:
         break
 round_keys.append(BitVector(textstring=round_key0))
-a3 = round_keys[0][32:64]
-
-def gen_round_keys():
-    w_0 = round_keys[0][0: 32] ^ g(round_keys[0][96: 128])
-    w_1 = w_0 ^ round_keys[0][32: 64]
-    w_2 = w_1 ^ round_keys[0][64: 96]
-    w_3 = w_2 ^ round_keys[0][96: 128]
-
-    this_roundkey = w_0
-    this_roundkey += w_1
-    this_roundkey += w_2
-    this_roundkey += w_3
-    print(this_roundkey.get_bitvector_in_hex())
-
-gen_round_keys()
-
-
-# print(a3.get_bitvector_in_hex())
-
-# print((round_keys[0][0:32]<<8).get_bitvector_in_hex())
 
 
 text = input("Enter your message:")
@@ -86,28 +75,115 @@ if len(text) > 16:
 if len(text)<16:
     padding = 16 - len(text)%16
     text = text + " " * padding
-# print(text)
+AES_input = BitVector(textstring=text)
+
+def gen_round_keys():
+    rc = BitVector(hexstring="01")
+    multiplier = BitVector(hexstring="02")
+    for i in range(10):
+        round_constant = BitVector(hexstring=rc.get_bitvector_in_hex())
+        round_constant += BitVector(hexstring="000000")
+
+        w_0 = round_keys[i][0: 32] ^ g(round_keys[i][96: 128],round_constant)
+        w_1 = w_0 ^ round_keys[i][32: 64]
+        w_2 = w_1 ^ round_keys[i][64: 96]
+        w_3 = w_2 ^ round_keys[i][96: 128]
+
+        this_roundkey = w_0
+        this_roundkey += w_1
+        this_roundkey += w_2
+        this_roundkey += w_3
+        round_keys.append(this_roundkey)
+        rc = multiplier.gf_multiply_modular(rc, BitVector(bitstring="100011011"), 8)
+        # print(this_roundkey.get_bitvector_in_hex())
+
+
+key_scheduling_time = time.time()
+gen_round_keys()
+key_scheduling_time = time.time() - key_scheduling_time
+
+
+def convert_bitvector_into_matrix(bitvector):
+    state_matrix = [[0 for x in range(4)] for y in range(4)]
+
+    for i in range(4):
+        for j in range(4):
+            state_matrix[j][i] = bitvector[(i*32+j*8):(i*32+j*8)+8]
+
+    return state_matrix
+
+def convert_matrix_into_bitvector(state_matrix):
+    shifted_bitvector = BitVector(size=0)
+
+    for i in range(4):
+        for j in range(4):
+            shifted_bitvector += state_matrix[j][i]
+
+    return shifted_bitvector
+
+def shift_rows(bitvector):
+    state_matrix = convert_bitvector_into_matrix(bitvector)
+
+    state_matrix[0] = state_matrix[0][0:] + state_matrix[0][: 0]
+    state_matrix[1] = state_matrix[1][1:] + state_matrix[1][: 1]
+    state_matrix[2] = state_matrix[2][2:] + state_matrix[2][: 2]
+    state_matrix[3] = state_matrix[3][3:] + state_matrix[3][: 3]
+
+    return convert_matrix_into_bitvector(state_matrix)
+
+def mix_column(bitvector):
+    result_matrix = []
+    matrix = convert_bitvector_into_matrix(bitvector)
+    for i in range(4):
+        result_matrix_row = []
+
+        for j in range(4):
+            temp = Mixer[i][0].gf_multiply_modular(matrix[0][j], AES_modulus, 8)
+            temp ^= Mixer[i][1].gf_multiply_modular(matrix[1][j], AES_modulus, 8)
+            temp ^= Mixer[i][2].gf_multiply_modular(matrix[2][j], AES_modulus, 8)
+            temp ^= Mixer[i][3].gf_multiply_modular(matrix[3][j], AES_modulus, 8)
+            result_matrix_row.append(temp)
+
+        result_matrix.append(result_matrix_row)
+
+    return convert_matrix_into_bitvector(result_matrix)
+
+
+def encrypt(bitvector):
+    bitvector = bitvector ^ round_keys[0]
+
+    for i in range(9):
+        bitvector = mix_column(shift_rows(sub_sbox(bitvector))) ^ round_keys[i+1]
+
+    bitvector = shift_rows(sub_sbox(bitvector)) ^ round_keys[10]
+
+    return bitvector
+
+
+
+encryption_time = time.time()
+AES_output = BitVector(size=0)
+AES_output = encrypt(BitVector(textstring=AES_input.get_bitvector_in_ascii()[0:16]))
+encryption_time = time.time() - encryption_time
+
+
+print("Ciphered output: {}".format(AES_output.get_bitvector_in_hex()))
+
+print("Key scheduling time: {} seconds".format(key_scheduling_time))
+print("Encryption time: {} seconds".format(encryption_time))
 
 
 
 
 
+# print(AES_output)
 
-
-
-
-
-
-
-
-
-
-# a = BitVector(size=0)
-# a += BitVector(textstring="Two one nine two")
+a = BitVector(size=0)
+a += BitVector(textstring="Two one nine two")
 # b = a.get_bitvector_in_hex()
 # d = a.get_bitvector_in_ascii()
 # print(d)
 # while True:
 #     msg = b
 #     print(type(msg))
-#     c.send(bytes(msg, "utf-8"))
+c.send(bytes(AES_output.get_bitvector_in_hex(), "utf-8"))
