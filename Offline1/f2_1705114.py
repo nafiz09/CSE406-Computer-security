@@ -1,11 +1,11 @@
 import socket
 from BitVector import *
-from AES import *
+from f3_1705114 import *
 import time
-from RSA import *
+from f4_1705114 import *
 
 s = socket.socket()
-s.connect(('localhost',4545))
+s.connect(('localhost',1234))
 
 AES_output = BitVector(size=0)
 decipher_output = BitVector(size=0)
@@ -48,6 +48,12 @@ decipher_output += decrypt(BitVector(hexstring=AES_output.get_bitvector_in_hex()
 decryption_time = time.time() - decryption_time
 
 
-print("Deciphered text [in ASCII]: {}".format(decipher_output.get_bitvector_in_ascii()))
-print("Decryption time: {} seconds".format(decryption_time))
+print("Deciphered Text:")
+print("{} [in HEX]".format(decipher_output.get_bitvector_in_hex()))
+print("{} [in ASCII]".format(decipher_output.get_bitvector_in_ascii()))
+print("\n\nExecution Time")
+print("Decryption Time : {} seconds".format(decryption_time))
+
+f = open("Don't Open this/DPT.txt", "w")
+f.write(decipher_output.get_bitvector_in_ascii())
 

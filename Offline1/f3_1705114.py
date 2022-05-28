@@ -1,4 +1,5 @@
 from BitVector import *
+import time
 
 Sbox = (
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -92,7 +93,7 @@ def gen_round_keys(round_keys):
         # print(round_keys)
     return round_keys
 
-def convert_bitvector_into_matrix(bitvector):
+def bitvector_to_matrix(bitvector):
     state_matrix = [[0 for x in range(4)] for y in range(4)]
 
     for i in range(4):
@@ -101,7 +102,7 @@ def convert_bitvector_into_matrix(bitvector):
 
     return state_matrix
 
-def convert_matrix_into_bitvector(state_matrix):
+def matrix_to_bitvector(state_matrix):
     shifted_bitvector = BitVector(size=0)
 
     for i in range(4):
@@ -111,18 +112,18 @@ def convert_matrix_into_bitvector(state_matrix):
     return shifted_bitvector
 
 def shift_rows(bitvector):
-    state_matrix = convert_bitvector_into_matrix(bitvector)
+    state_matrix = bitvector_to_matrix(bitvector)
 
     state_matrix[0] = state_matrix[0][0:] + state_matrix[0][: 0]
     state_matrix[1] = state_matrix[1][1:] + state_matrix[1][: 1]
     state_matrix[2] = state_matrix[2][2:] + state_matrix[2][: 2]
     state_matrix[3] = state_matrix[3][3:] + state_matrix[3][: 3]
 
-    return convert_matrix_into_bitvector(state_matrix)
+    return matrix_to_bitvector(state_matrix)
 
 def mix_column(bitvector):
     result_matrix = []
-    matrix = convert_bitvector_into_matrix(bitvector)
+    matrix = bitvector_to_matrix(bitvector)
     for i in range(4):
         result_matrix_row = []
 
@@ -135,7 +136,7 @@ def mix_column(bitvector):
 
         result_matrix.append(result_matrix_row)
 
-    return convert_matrix_into_bitvector(result_matrix)
+    return matrix_to_bitvector(result_matrix)
 
 
 def encrypt(bitvector,round_keys):
@@ -150,7 +151,7 @@ def encrypt(bitvector,round_keys):
 
 
 
-def inverse_substitute_bytes_using_invsbox(bitvector):
+def sub_invbox(bitvector):
     invsub_bitvector = BitVector(size=0)
 
     for i in range(0, bitvector.length(), 8):
@@ -161,18 +162,18 @@ def inverse_substitute_bytes_using_invsbox(bitvector):
 
 
 def inverse_shift_rows(bitvector):
-    state_matrix = convert_bitvector_into_matrix(bitvector)
+    state_matrix = bitvector_to_matrix(bitvector)
 
     state_matrix[0] = state_matrix[0][4:] + state_matrix[0][: 4]
     state_matrix[1] = state_matrix[1][3:] + state_matrix[1][: 3]
     state_matrix[2] = state_matrix[2][2:] + state_matrix[2][: 2]
     state_matrix[3] = state_matrix[3][1:] + state_matrix[3][: 1]
 
-    return convert_matrix_into_bitvector(state_matrix)
+    return matrix_to_bitvector(state_matrix)
 
 def inv_mix_column(bitvector):
     result_matrix = []
-    matrix = convert_bitvector_into_matrix(bitvector)
+    matrix = bitvector_to_matrix(bitvector)
     for i in range(4):
         result_matrix_row = []
 
@@ -185,15 +186,66 @@ def inv_mix_column(bitvector):
 
         result_matrix.append(result_matrix_row)
 
-    return convert_matrix_into_bitvector(result_matrix)
+    return matrix_to_bitvector(result_matrix)
 
 
 def decrypt(bitvector,round_keys):
     bitvector = bitvector ^ round_keys[10]
 
     for i in range(9):
-        bitvector = inv_mix_column(inverse_substitute_bytes_using_invsbox(inverse_shift_rows(bitvector)) ^ round_keys[9 - i])
+        bitvector = inv_mix_column(sub_invbox(inverse_shift_rows(bitvector)) ^ round_keys[9 - i])
 
-    bitvector = inverse_substitute_bytes_using_invsbox(inverse_shift_rows(bitvector)) ^ round_keys[0]
+    bitvector = sub_invbox(inverse_shift_rows(bitvector)) ^ round_keys[0]
     return bitvector
 
+def AES():
+    # key_scheduling_time = 0
+    # encryption_time = 0
+    # decryption_time = 0
+    round_keys = []
+    decipher_output = BitVector(size=0)
+    text = input("Plain Text:\n")
+    print("{} [in ASCII]".format(text))
+    if len(text) > 16:
+        text = text[0:16]
+    if len(text) < 16:
+        padding = 16 - len(text) % 16
+        text = text + " " * padding
+    AES_input = BitVector(textstring=text)
+    print("{} [in HEX]\n".format(AES_input.get_bitvector_in_hex()))
+
+    while True:
+        round_key0 = input("Key:\n")
+        if len(round_key0) != 16:
+            print("Invalid key size. Please enter valid key.")
+        if len(round_key0) == 16:
+            break
+    round_keys.append(BitVector(textstring=round_key0))
+    print("{} [in ASCII]".format(round_keys[0].get_bitvector_in_ascii()))
+    print("{} [in HEX]\n".format(round_keys[0].get_bitvector_in_hex()))
+
+    key_scheduling_time = time.time()
+    round_keys = gen_round_keys(round_keys)
+    key_scheduling_time = time.time() - key_scheduling_time
+    encryption_time = time.time()
+    AES_output = encrypt(BitVector(textstring=AES_input.get_bitvector_in_ascii()[0:16]),round_keys)
+    encryption_time = time.time() - encryption_time
+    print("\n\nCipher Text:")
+    print("{} [in HEX]".format(AES_output.get_bitvector_in_hex()))
+    print("{} [in ASCII]".format(AES_output.get_bitvector_in_ascii()))
+
+    decryption_time = time.time()
+    decipher_output += decrypt(BitVector(hexstring=AES_output.get_bitvector_in_hex()[0:32]), round_keys)
+    decryption_time = time.time() - decryption_time
+
+    print("\nDeciphered Text:")
+    print("{} [in HEX]".format(decipher_output.get_bitvector_in_hex()))
+    print("{} [in ASCII]".format(decipher_output.get_bitvector_in_ascii()))
+
+    print("\nExecution Time")
+    print("Key scheduling : {} seconds".format(key_scheduling_time))
+    print("Encryption Time : {} seconds".format(encryption_time))
+    print("Decryption Time : {} seconds".format(decryption_time))
+
+
+# AES()
