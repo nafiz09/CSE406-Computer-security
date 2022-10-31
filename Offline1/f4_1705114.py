@@ -81,7 +81,7 @@ def report_generation():
         # print(text)
         print("k = {}: ".format(k))
         print("Key generation time :{}".format(keygeneration))
-        print("Encryption time :{}".format(encryption))
+        print("Enyption time :{}".format(encryption))
         print("Decryption time :{}".format(decryption))
         k *= 2
 
@@ -95,6 +95,6 @@ def RSA():
 
 # RSA()
 
-# report_generation()
+report_generation()
 
 

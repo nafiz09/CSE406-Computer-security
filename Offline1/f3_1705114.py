@@ -248,4 +248,4 @@ def AES():
     print("Decryption Time : {} seconds".format(decryption_time))
 
 
-# AES()
+AES()
