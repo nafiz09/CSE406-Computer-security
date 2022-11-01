@@ -6,3 +6,8 @@ This repository contains all the course works I have done in Computer Security S
 
 **2. Malware Design**
 <p>The main objective of this assignment was to design a worm. The infamous Morris worm was implemented in this assignment and demo propagation was simulated in a model computer network</p>
+
+<br>
+<br>
+
+> <h3>Detailed problem statements are inserted inside respective directory</h3>
